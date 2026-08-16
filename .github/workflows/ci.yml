@@ -42,7 +42,7 @@ jobs:
         run: |
           chmod +x android/gradlew
           ./android/gradlew -p android :app:assembleDebug -PbridgeUrl=
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: CodexBridge-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk

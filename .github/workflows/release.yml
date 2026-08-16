@@ -26,7 +26,7 @@ jobs:
         run: |
           .\scripts\build-windows-release.ps1 -OutputDirectory .\release
           .\scripts\build-relay-release.ps1 -OutputDirectory .\release
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-release
           path: |
@@ -65,7 +65,7 @@ jobs:
           ./android/gradlew -p android clean :app:assembleRelease -PbridgeUrl=
           mkdir -p release
           cp android/app/build/outputs/apk/release/app-release.apk release/CodexBridge.apk
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: android-release
           path: release/CodexBridge.apk
