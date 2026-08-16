@@ -37,7 +37,7 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: gradle
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - name: Build debug APK
         run: |
           chmod +x android/gradlew
