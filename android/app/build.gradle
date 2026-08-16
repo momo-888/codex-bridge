@@ -72,7 +72,7 @@ android {
 
 dependencies {
     implementation "com.journeyapps:zxing-android-embedded:4.3.0"
-    def composeBom = platform("androidx.compose:compose-bom:2025.04.01")
+    def composeBom = platform("androidx.compose:compose-bom:2026.08.00")
     implementation composeBom
     implementation "androidx.activity:activity-compose:1.10.1"
     implementation "androidx.webkit:webkit:1.12.1"
