@@ -489,6 +489,11 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/api/projects") {
+      json(response, 200, await desktopIntegration.listProjects());
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/api/codex-options") {
       json(response, 200, await bridge.getRunOptions(url.searchParams.get("cwd") || process.cwd()));
       return;

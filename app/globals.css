@@ -596,7 +596,7 @@ svg { flex: 0 0 auto; }
 .search-box svg { color: var(--muted); }
 .search-box input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--text); }
 .picker-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-.picker-list > button { width: 100%; min-height: 84px; padding: 12px 5px; display: flex; align-items: center; gap: 8px; border: 0; border-bottom: 1px solid var(--line-soft); background: transparent; text-align: left; }
+.picker-list > button { width: 100%; min-height: 84px; padding: 12px 5px; display: flex; align-items: center; gap: 8px; border: 0; border-bottom: 1px solid var(--line-soft); background: transparent; text-align: left; content-visibility: auto; contain-intrinsic-size: 84px; }
 .picker-list > button.selected { border-left: 2px solid var(--accent); padding-left: 12px; background: #7cb7ff08; }
 .picker-list > button > span { flex: 1; min-width: 0; }
 .picker-list strong, .picker-list small, .picker-list em { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

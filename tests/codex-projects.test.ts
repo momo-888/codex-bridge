@@ -141,6 +141,69 @@ test("detects whether Desktop classified a thread into a project or Chats", asyn
   }
 });
 
+test("lists the same named projects and thread assignments as Codex Desktop", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "codex-bridge-project-test-"));
+  const statePath = path.join(root, "state.json");
+  try {
+    await writeFile(
+      statePath,
+      JSON.stringify({
+        "local-projects": {
+          older: {
+            id: "older",
+            name: "Older project",
+            rootPaths: [path.join(root, "older")],
+            createdAt: 100,
+            updatedAt: 200,
+          },
+          recent: {
+            id: "recent",
+            name: "Recent project",
+            rootPaths: [path.join(root, "recent"), path.join(root, "shared")],
+            createdAt: 300,
+            updatedAt: 400,
+          },
+        },
+        "selected-project": { type: "local", projectId: "recent" },
+        "thread-project-assignments": {
+          "thread-1": { projectKind: "local", projectId: "recent" },
+          "thread-2": { projectKind: "local", projectId: "recent" },
+          "thread-3": { projectKind: "local", projectId: "older" },
+        },
+      }),
+    );
+    const registrar = new CodexProjectRegistrar({ platform: "darwin", statePath });
+
+    const catalog = await registrar.listProjects();
+
+    assert.equal(catalog.selectedProjectId, "recent");
+    assert.deepEqual(
+      catalog.data.map(({ id, name, rootPaths, threadIds }) => ({
+        id,
+        name,
+        rootPaths: rootPaths.map((value) => path.basename(value)),
+        threadIds,
+      })),
+      [
+        {
+          id: "recent",
+          name: "Recent project",
+          rootPaths: ["recent", "shared"],
+          threadIds: ["thread-1", "thread-2"],
+        },
+        {
+          id: "older",
+          name: "Older project",
+          rootPaths: ["older"],
+          threadIds: ["thread-3"],
+        },
+      ],
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("does not launch or guess placement when the Codex state file cannot be read", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "codex-bridge-project-test-"));
   const statePath = path.join(root, "missing-state.json");
@@ -176,6 +239,38 @@ test("reveals a mobile thread through the desktop deep link", async () => {
 
   assert.equal(await registrar.revealThread("mobile-thread"), true);
   assert.equal(revealedThreadId, "mobile-thread");
+});
+
+test("supports project registration and thread deep links on macOS", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "codex-bridge-project-test-"));
+  const statePath = path.join(root, "state.json");
+  let openedProject = "";
+  let revealedThread = "";
+  try {
+    await writeFile(statePath, JSON.stringify({ "local-projects": {} }));
+    const registrar = new CodexProjectRegistrar({
+      platform: "darwin",
+      statePath,
+      launch: async (projectPath) => {
+        openedProject = projectPath;
+        await writeFile(
+          statePath,
+          JSON.stringify({ "local-projects": { created: { rootPaths: [projectPath] } } }),
+        );
+      },
+      launchThread: async (threadId) => {
+        revealedThread = threadId;
+      },
+      registrationTimeoutMs: 500,
+    });
+
+    assert.equal((await registrar.ensure(root)).status, "registered");
+    assert.equal(openedProject, root);
+    assert.equal(await registrar.revealThread("mac-thread"), true);
+    assert.equal(revealedThread, "mac-thread");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("does not try to reveal desktop threads on unsupported platforms", async () => {

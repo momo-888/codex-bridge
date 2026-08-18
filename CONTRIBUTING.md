@@ -31,6 +31,8 @@ Android changes additionally require JDK 21 and Android SDK 35. On Windows, `scr
 - `relay/`: authenticated public Relay
 - `android/`: Android WebView shell and native image viewer
 - `desktop/`: Windows tray application
+- `macos/`: macOS browser manager, supervisor, and pairing integration
+- `scripts/*.sh`: macOS Host/Web lifecycle, login startup, and release tooling
 - `tests/`: Node regression tests
 
 By contributing, you agree that your contributions are licensed under Apache License 2.0.

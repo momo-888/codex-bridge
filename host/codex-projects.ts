@@ -9,14 +9,35 @@ const execFileAsync = promisify(execFile);
 
 type CodexLocalProject = {
   id?: unknown;
+  name?: unknown;
   rootPaths?: unknown;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+};
+
+type CodexThreadProjectAssignment = {
+  projectId?: unknown;
 };
 
 type CodexGlobalState = {
   "local-projects"?: Record<string, CodexLocalProject>;
   "selected-project"?: unknown;
-  "thread-project-assignments"?: Record<string, unknown>;
+  "thread-project-assignments"?: Record<string, CodexThreadProjectAssignment>;
   "projectless-thread-ids"?: unknown;
+};
+
+export type CodexProjectSummary = {
+  id: string;
+  name: string;
+  rootPaths: string[];
+  createdAt: number | null;
+  updatedAt: number | null;
+  threadIds: string[];
+};
+
+export type CodexProjectCatalog = {
+  data: CodexProjectSummary[];
+  selectedProjectId: string | null;
 };
 
 export type ThreadProjectPlacement =
@@ -68,11 +89,36 @@ function projectIdForExactWorkspace(
   return null;
 }
 
+function numericTimestamp(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 async function pause(milliseconds: number) {
   await new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function findCodexDesktopExecutable() {
+async function findCodexDesktopExecutable(
+  platform: NodeJS.Platform = process.platform,
+) {
+  if (platform === "darwin") {
+    const candidates = [
+      "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT",
+      path.join(os.homedir(), "Applications", "ChatGPT.app", "Contents", "MacOS", "ChatGPT"),
+      "/Applications/Codex.app/Contents/MacOS/Codex",
+      path.join(os.homedir(), "Applications", "Codex.app", "Contents", "MacOS", "Codex"),
+    ];
+    for (const executable of candidates) {
+      try {
+        await access(executable);
+        return executable;
+      } catch {
+        // Keep checking supported installation locations.
+      }
+    }
+    throw new Error("未找到 Codex 桌面版，请先安装并登录 Codex");
+  }
+  if (platform !== "win32")
+    throw new Error(`Codex Desktop is not available on ${platform}`);
   const command = [
     "$package = Get-AppxPackage -Name OpenAI.Codex | Sort-Object Version -Descending | Select-Object -First 1",
     "if ($null -eq $package) { exit 2 }",
@@ -90,13 +136,16 @@ async function findCodexDesktopExecutable() {
   return executable;
 }
 
-async function launchCodexProject(projectPath: string) {
-  const executable = await findCodexDesktopExecutable();
+async function launchCodexProject(
+  projectPath: string,
+  platform: NodeJS.Platform = process.platform,
+) {
+  const executable = await findCodexDesktopExecutable(platform);
   await new Promise<void>((resolve, reject) => {
     const child = spawn(executable, ["--open-project", projectPath], {
       detached: true,
       stdio: "ignore",
-      windowsHide: true,
+      windowsHide: platform === "win32",
     });
     child.once("error", reject);
     child.once("spawn", () => {
@@ -106,13 +155,16 @@ async function launchCodexProject(projectPath: string) {
   });
 }
 
-async function launchCodexThread(threadId: string) {
-  const executable = await findCodexDesktopExecutable();
+async function launchCodexThread(
+  threadId: string,
+  platform: NodeJS.Platform = process.platform,
+) {
+  const executable = await findCodexDesktopExecutable(platform);
   await new Promise<void>((resolve, reject) => {
     const child = spawn(executable, [`codex://threads/${encodeURIComponent(threadId)}`], {
       detached: true,
       stdio: "ignore",
-      windowsHide: true,
+      windowsHide: platform === "win32",
     });
     child.once("error", reject);
     child.once("spawn", () => {
@@ -134,8 +186,8 @@ export class CodexProjectRegistrar {
   constructor(options: ProjectRegistrarOptions = {}) {
     this.platform = options.platform ?? process.platform;
     this.statePath = options.statePath ?? path.join(os.homedir(), ".codex", ".codex-global-state.json");
-    this.launch = options.launch ?? launchCodexProject;
-    this.launchThread = options.launchThread ?? launchCodexThread;
+    this.launch = options.launch ?? ((projectPath) => launchCodexProject(projectPath, this.platform));
+    this.launchThread = options.launchThread ?? ((threadId) => launchCodexThread(threadId, this.platform));
     this.registrationTimeoutMs = options.registrationTimeoutMs ?? 4_000;
     this.selectionSettleMs = options.selectionSettleMs ?? 1_300;
   }
@@ -192,7 +244,7 @@ export class CodexProjectRegistrar {
   }
 
   async revealThread(threadId: string) {
-    if (this.platform !== "win32") return false;
+    if (this.platform !== "win32" && this.platform !== "darwin") return false;
     try {
       await this.launchThread(threadId);
       logBridgeEvent("desktop_thread_revealed", { threadId });
@@ -228,8 +280,58 @@ export class CodexProjectRegistrar {
     return "unassigned";
   }
 
+  async listProjects(): Promise<CodexProjectCatalog> {
+    const state = await this.readState();
+    const threadIdsByProject = new Map<string, string[]>();
+    for (const [threadId, assignment] of Object.entries(
+      state["thread-project-assignments"] ?? {},
+    )) {
+      const projectId =
+        assignment && typeof assignment === "object" && typeof assignment.projectId === "string"
+          ? assignment.projectId
+          : null;
+      if (!projectId) continue;
+      const threadIds = threadIdsByProject.get(projectId) ?? [];
+      threadIds.push(threadId);
+      threadIdsByProject.set(projectId, threadIds);
+    }
+
+    const data = Object.entries(state["local-projects"] ?? {})
+      .map(([key, project]): CodexProjectSummary | null => {
+        const id = typeof project.id === "string" && project.id ? project.id : key;
+        const rootPaths = Array.isArray(project.rootPaths)
+          ? project.rootPaths.filter((root): root is string => typeof root === "string" && Boolean(root))
+          : [];
+        if (!rootPaths.length) return null;
+        return {
+          id,
+          name:
+            typeof project.name === "string" && project.name.trim()
+              ? project.name.trim()
+              : path.basename(rootPaths[0]) || rootPaths[0],
+          rootPaths,
+          createdAt: numericTimestamp(project.createdAt),
+          updatedAt: numericTimestamp(project.updatedAt),
+          threadIds: threadIdsByProject.get(id) ?? [],
+        };
+      })
+      .filter((project): project is CodexProjectSummary => project != null)
+      .sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0));
+
+    const selected = state["selected-project"];
+    const selectedProjectId =
+      selected &&
+      typeof selected === "object" &&
+      "projectId" in selected &&
+      typeof selected.projectId === "string"
+        ? selected.projectId
+        : null;
+    return { data, selectedProjectId };
+  }
+
   private async validateProjectPath(projectPath: string): Promise<ProjectRegistrationResult | null> {
-    if (this.platform !== "win32") return { status: "unsupported", path: projectPath };
+    if (this.platform !== "win32" && this.platform !== "darwin")
+      return { status: "unsupported", path: projectPath };
     try {
       const metadata = await stat(projectPath);
       if (!metadata.isDirectory())

@@ -76,6 +76,7 @@ import {
   type PendingUserMessage,
 } from "./pending-messages";
 import { resolveComposerPrimaryAction } from "./composer-state";
+import { collectThreadPages, type ThreadPage } from "./thread-catalog";
 
 type ConnectionSettings = { server: string; token: string };
 type PairingCandidate = { server: string; token?: string; code?: string };
@@ -157,6 +158,18 @@ type ThreadSummary = {
   bridgeOwned?: boolean;
   desktopActive?: boolean;
   queueLength?: number;
+};
+type CodexProjectSummary = {
+  id: string;
+  name: string;
+  rootPaths: string[];
+  createdAt: number | null;
+  updatedAt: number | null;
+  threadIds: string[];
+};
+type CodexProjectCatalog = {
+  data: CodexProjectSummary[];
+  selectedProjectId: string | null;
 };
 type ThreadItem = Record<string, unknown> & { type: string; id?: string };
 type LocalMarkdownImage = { source: string; id: string };
@@ -1761,6 +1774,7 @@ export function BridgeApp() {
     token: "",
   });
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
+  const [projects, setProjects] = useState<CodexProjectSummary[]>([]);
   const [detail, setDetail] = useState<ThreadDetail | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [approvals, setApprovals] = useState<Approval[]>([]);
@@ -1905,17 +1919,26 @@ export function BridgeApp() {
 
   const loadThreads = useCallback(
     async (activeSettings: ConnectionSettings) => {
-      const response = await api<{ data: ThreadSummary[] }>(
-        activeSettings,
-        "/api/threads",
-      );
-      setThreads(response.data);
+      const [catalog, projectCatalog] = await Promise.all([
+        collectThreadPages<ThreadSummary>((cursor) =>
+          api<ThreadPage<ThreadSummary>>(
+            activeSettings,
+            `/api/threads${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`,
+          ),
+        ),
+        api<CodexProjectCatalog>(activeSettings, "/api/projects").catch(() => ({
+          data: [],
+          selectedProjectId: null,
+        })),
+      ]);
+      setThreads(catalog);
+      setProjects(projectCatalog.data);
       setConnection("online");
       setSelectedId(
         (current) =>
           current ||
           localStorage.getItem(selectedThreadKey) ||
-          response.data[0]?.id ||
+          catalog[0]?.id ||
           null,
       );
     },
@@ -2452,23 +2475,65 @@ export function BridgeApp() {
   }, [eventsConnected, refresh, selectedId, settings]);
 
   const workspaces = useMemo(() => {
-    const map = new Map<string, ThreadSummary[]>();
-    for (const thread of threads) {
-      const items = map.get(thread.cwd) || [];
-      items.push(thread);
-      map.set(thread.cwd, items);
+    if (!projects.length) {
+      const map = new Map<string, ThreadSummary[]>();
+      for (const thread of threads) {
+        const items = map.get(thread.cwd) || [];
+        items.push(thread);
+        map.set(thread.cwd, items);
+      }
+      return [...map.entries()]
+        .map(([cwd, items]) => ({
+          key: `workspace:${cwd}`,
+          cwd,
+          name: workspaceName(cwd),
+          threads: items,
+          updatedAt: Math.max(
+            ...items.map((item) => item.recencyAt || item.updatedAt),
+          ),
+        }))
+        .sort((left, right) => right.updatedAt - left.updatedAt);
     }
-    return [...map.entries()]
-      .map(([cwd, items]) => ({
-        cwd,
-        name: workspaceName(cwd),
-        threads: items,
-        updatedAt: Math.max(
-          ...items.map((item) => item.recencyAt || item.updatedAt),
-        ),
-      }))
+
+    const threadsById = new Map(threads.map((thread) => [thread.id, thread]));
+    const assignedThreadIds = new Set(projects.flatMap((project) => project.threadIds));
+    const unassignedThreadsByCwd = new Map<string, ThreadSummary[]>();
+    for (const thread of threads) {
+      if (assignedThreadIds.has(thread.id)) continue;
+      const items = unassignedThreadsByCwd.get(thread.cwd) || [];
+      items.push(thread);
+      unassignedThreadsByCwd.set(thread.cwd, items);
+    }
+
+    return projects
+      .map((project) => {
+        const items = new Map<string, ThreadSummary>();
+        for (const threadId of project.threadIds) {
+          const thread = threadsById.get(threadId);
+          if (thread) items.set(thread.id, thread);
+        }
+        for (const rootPath of project.rootPaths) {
+          for (const thread of unassignedThreadsByCwd.get(rootPath) || [])
+            items.set(thread.id, thread);
+        }
+        const projectThreads = [...items.values()].sort(
+          (left, right) =>
+            (right.recencyAt || right.updatedAt) - (left.recencyAt || left.updatedAt),
+        );
+        const projectTimestamp = project.updatedAt || project.createdAt || 0;
+        return {
+          key: `project:${project.id}`,
+          cwd: project.rootPaths[0],
+          name: project.name,
+          threads: projectThreads,
+          updatedAt: projectThreads.reduce(
+            (latest, thread) => Math.max(latest, thread.recencyAt || thread.updatedAt),
+            projectTimestamp,
+          ),
+        };
+      })
       .sort((left, right) => right.updatedAt - left.updatedAt);
-  }, [threads]);
+  }, [projects, threads]);
   const activeThreads = useMemo(
     () =>
       threads.filter(
@@ -2482,8 +2547,9 @@ export function BridgeApp() {
   );
   const recentThreads = useMemo(() => {
     const activeIds = new Set(activeThreads.map((thread) => thread.id));
-    return threads.filter((thread) => !activeIds.has(thread.id)).slice(0, 5);
+    return threads.filter((thread) => !activeIds.has(thread.id)).slice(0, 10);
   }, [activeThreads, threads]);
+  const historicalThreadCount = Math.max(0, threads.length - activeThreads.length);
   const filteredThreads = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return needle
@@ -3546,6 +3612,9 @@ export function BridgeApp() {
                 <Clock />
                 最近任务
               </span>
+              <button className="text-button" onClick={openTaskPicker}>
+                全部 {historicalThreadCount}
+              </button>
             </div>
             <div className="grouped-list">
               {recentThreads.map((thread) => (
@@ -4041,7 +4110,7 @@ export function BridgeApp() {
   );
 
   const selectedWorkspace = workspaceFilter
-    ? workspaces.find((item) => item.cwd === workspaceFilter)
+    ? workspaces.find((item) => item.key === workspaceFilter)
     : null;
   const workspaceScreen = (
     <section className="screen workspace-screen">
@@ -4117,8 +4186,8 @@ export function BridgeApp() {
               {workspaces.map((workspace) => (
                 <button
                   className="workspace-row"
-                  key={workspace.cwd}
-                  onClick={() => setWorkspaceFilter(workspace.cwd)}
+                  key={workspace.key}
+                  onClick={() => setWorkspaceFilter(workspace.key)}
                 >
                   <span className="workspace-icon">
                     <Folder />

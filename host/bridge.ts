@@ -139,6 +139,12 @@ function sameRunConfiguration(
   );
 }
 
+function normalizeWorkspacePath(candidate: string) {
+  return path.win32.isAbsolute(candidate)
+    ? path.win32.normalize(candidate)
+    : path.resolve(candidate);
+}
+
 export class CodexBridge extends EventEmitter {
   readonly rpc = new CodexRpcClient();
   readonly activeTurns = new Map<string, string>();
@@ -230,7 +236,7 @@ export class CodexBridge extends EventEmitter {
   }
 
   async getRunOptions(cwd = process.cwd(), force = false): Promise<RunOptions> {
-    const normalizedCwd = path.resolve(cwd);
+    const normalizedCwd = normalizeWorkspacePath(cwd);
     const cached = this.runOptionsCache.get(normalizedCwd);
     if (!force && cached && cached.expiresAt > Date.now()) return cached.value;
 
@@ -321,7 +327,7 @@ export class CodexBridge extends EventEmitter {
 
   async listThreads(params: Record<string, unknown> = {}) {
     const response = await this.rpc.request<ThreadListResponse>("thread/list", {
-      limit: 40,
+      limit: 100,
       sortKey: "recency_at",
       sortDirection: "desc",
       sourceKinds: ["cli", "vscode", "exec", "appServer"],
@@ -608,7 +614,7 @@ export class CodexBridge extends EventEmitter {
 
   async prepareDraft(draftId: string, cwd: string) {
     const normalizedId = draftId.trim();
-    const normalizedCwd = path.resolve(cwd);
+    const normalizedCwd = normalizeWorkspacePath(cwd);
     if (!normalizedId) throw new Error("Draft ID is required");
     if (this.cancelledDrafts.has(normalizedId)) throw new Error("This draft was cancelled");
 
@@ -1348,7 +1354,7 @@ export class CodexBridge extends EventEmitter {
 
   private async claimDraft(draftId: string, cwd: string): Promise<PreparedThread> {
     const normalizedId = draftId.trim();
-    const normalizedCwd = path.resolve(cwd);
+    const normalizedCwd = normalizeWorkspacePath(cwd);
     let entry = this.draftPreparations.get(normalizedId);
     if (!entry || entry.cwd !== normalizedCwd) {
       if (entry) this.removeDraft(normalizedId);

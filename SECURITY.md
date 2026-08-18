@@ -6,9 +6,9 @@ Security fixes are applied to the latest release on the default branch. Early pr
 
 ## Threat model
 
-Codex Bridge is designed for one trusted user controlling their own Windows computer.
+Codex Bridge is designed for one trusted user controlling their own Windows or macOS computer.
 
-- The Windows Host reads local Codex history and can start or continue Codex tasks.
+- The desktop Host reads local Codex history and can start or continue Codex tasks.
 - A valid phone or host bearer token grants powerful access. Treat these tokens as passwords.
 - Pairing codes are short-lived and single-use, but the token obtained after pairing remains valid until it is rotated.
 - The public Relay terminates TLS and forwards message, task, approval, attachment, and event data. The current protocol does not provide end-to-end encryption from phone to Host.
@@ -21,9 +21,10 @@ The Relay is not a multi-tenant isolation boundary. Run a separate deployment an
 ## Safer deployment defaults
 
 - Keep the Host bound to `127.0.0.1` unless private-network access is explicitly required.
+- The macOS management page is deliberately fixed to `127.0.0.1:43109`; do not proxy or expose it to another device.
 - Put public deployments behind HTTPS/WSS and a maintained reverse proxy.
 - Enable `CODEX_RELAY_TRUST_PROXY=true` only when the Relay port is reachable exclusively through a trusted reverse proxy.
-- Restrict firewall access, rotate both Relay tokens after suspected exposure, and keep `%USERPROFILE%\.codex-bridge` private.
+- Restrict firewall access, rotate both Relay tokens after suspected exposure, and keep `%USERPROFILE%\.codex-bridge` or `~/.codex-bridge` private.
 - Store Android signing keys and deployment secrets outside the repository.
 - Review dependency alerts and install updates promptly.
 

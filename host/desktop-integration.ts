@@ -4,6 +4,7 @@ import {
 } from "./codex-ipc";
 import {
   CodexProjectRegistrar,
+  type CodexProjectCatalog,
   type ProjectRegistrationResult,
   type ThreadProjectPlacement,
 } from "./codex-projects";
@@ -36,7 +37,7 @@ type DesktopIpcGateway = Pick<
 type DesktopProjectGateway = Pick<
   CodexProjectRegistrar,
   "ensure" | "openProject" | "getThreadPlacement" | "revealThread"
->;
+> & Partial<Pick<CodexProjectRegistrar, "listProjects">>;
 
 type DesktopIntegrationOptions = {
   ipc?: DesktopIpcGateway;
@@ -85,6 +86,10 @@ export class DesktopIntegrationService {
 
   ensureProject(projectPath: string) {
     return this.projects.ensure(projectPath);
+  }
+
+  listProjects(): Promise<CodexProjectCatalog> {
+    return this.projects.listProjects?.() ?? Promise.resolve({ data: [], selectedProjectId: null });
   }
 
   findThreadOwner(hostId: string, threadId: string) {

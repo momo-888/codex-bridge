@@ -1,5 +1,7 @@
 import net from "node:net";
 import { randomUUID } from "node:crypto";
+import os from "node:os";
+import path from "node:path";
 import type { CodexRunOverrides, ReasoningEffort } from "./run-options";
 import type { CodexInput } from "./codex-input";
 
@@ -18,9 +20,18 @@ type PendingRequest = {
   timer: NodeJS.Timeout;
 };
 
-const IPC_PATH = "\\\\.\\pipe\\codex-ipc";
 const INITIALIZING_CLIENT_ID = "initializing-client";
 const MAX_FRAME_BYTES = 256 * 1024 * 1024;
+
+export function codexDesktopIpcPath(
+  platform: NodeJS.Platform = process.platform,
+  homeDirectory = os.homedir(),
+) {
+  if (platform === "win32") return "\\\\.\\pipe\\codex-ipc";
+  if (platform === "darwin")
+    return path.join(homeDirectory, ".codex", "ipc", "ipc.sock");
+  throw new Error(`Codex Desktop IPC is not available on ${platform}`);
+}
 
 const methodVersions: Record<string, number> = {
   "thread-unarchived": 1,
@@ -186,9 +197,8 @@ export class CodexDesktopIpcClient {
   }
 
   private async open(timeoutMs: number) {
-    if (process.platform !== "win32") throw new Error("Codex Desktop IPC is only available on Windows");
     this.close();
-    const socket = net.createConnection(IPC_PATH);
+    const socket = net.createConnection(codexDesktopIpcPath());
     this.socket = socket;
     socket.on("data", (chunk) => this.onData(chunk));
     socket.on("error", () => undefined);

@@ -13,6 +13,8 @@
     "start": "vinext start --host 0.0.0.0",
     "host": "tsx host/server.ts",
     "host:dev": "tsx watch host/server.ts",
+    "macos": "./scripts/run-macos.sh",
+    "test:macos": "node --test tests/macos-supervisor.test.mjs",
     "relay": "tsx relay/server.ts",
     "icons": "node scripts/generate-icons.mjs",
     "test": "npm run build && node --import tsx --test tests/*.test.*",

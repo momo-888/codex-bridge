@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark light">
+    <title>Codex Bridge · macOS</title>
+    <link rel="stylesheet" href="/dashboard.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">CODEX BRIDGE · macOS</p>
+          <h1>电脑端管理</h1>
+          <p id="detail" class="muted">正在读取运行状态…</p>
+        </div>
+        <div id="stateBadge" class="state starting"><span></span>正在检查</div>
+      </header>
+
+      <section class="card status-card">
+        <div class="section-title">
+          <div>
+            <h2>运行状态</h2>
+            <p id="checkedAt" class="muted">尚未检查</p>
+          </div>
+          <button class="quiet" data-action="check">立即检查</button>
+        </div>
+        <div class="health-grid">
+          <div class="health"><span id="apiDot" class="dot"></span><strong>Host</strong><small id="apiText">未知</small></div>
+          <div class="health"><span id="codexDot" class="dot"></span><strong>Codex</strong><small id="codexText">未知</small></div>
+          <div class="health"><span id="webDot" class="dot"></span><strong>手机网页</strong><small id="webText">未知</small></div>
+          <div class="health"><span id="relayDot" class="dot"></span><strong>公网中继</strong><small id="relayText">未启用</small></div>
+        </div>
+        <div class="address-row">
+          <div><span class="label">手机连接地址</span><code id="mobileUrl">—</code></div>
+          <div class="inline-actions">
+            <button class="quiet" data-action="copy-url">复制</button>
+            <button class="quiet" data-action="open-mobile">打开</button>
+            <button class="primary" data-action="open-setup">配对二维码</button>
+          </div>
+        </div>
+        <div class="button-row">
+          <button data-action="start">启动 Bridge</button>
+          <button data-action="stop">停止 Bridge</button>
+          <button data-action="restart">重启 Bridge</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-title">
+          <div>
+            <h2>手机连接</h2>
+            <p class="muted">默认仅本机；仅在可信私有网络中开启直连。</p>
+          </div>
+        </div>
+        <form id="connectionForm">
+          <div class="mode-grid">
+            <label class="mode"><input type="radio" name="mode" value="local"><span><strong>仅本机</strong><small>127.0.0.1，不接受其他设备连接</small></span></label>
+            <label class="mode"><input type="radio" name="mode" value="network"><span><strong>局域网 / 异地组网</strong><small>Linker、Tailscale 或可信 LAN</small></span></label>
+            <label class="mode"><input type="radio" name="mode" value="relay"><span><strong>公网中继</strong><small>HTTPS/WSS，仅建立出站连接</small></span></label>
+          </div>
+
+          <div id="networkFields" class="fields hidden">
+            <label>这台 Mac 的 IPv4 地址
+              <select id="networkAddress"></select>
+            </label>
+            <p id="networkPreview" class="preview"></p>
+          </div>
+
+          <div id="relayFields" class="fields hidden">
+            <label>中继服务器<input id="relayUrl" type="url" placeholder="https://bridge.example.com"></label>
+            <label>电脑令牌（Host Token）<input id="hostToken" type="password" autocomplete="off"></label>
+            <label>手机令牌（Phone Token）<input id="phoneToken" type="password" autocomplete="off"></label>
+            <div class="inline-actions left">
+              <button type="button" class="quiet" data-action="test-relay">测试服务器</button>
+              <span id="relayTestResult" class="muted"></span>
+            </div>
+          </div>
+
+          <div class="form-footer">
+            <span id="saveResult" class="muted"></span>
+            <button class="primary" type="submit">保存并重启</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="section-title">
+          <div>
+            <h2>待处理配对</h2>
+            <p class="muted">新请求也会自动弹出 macOS 确认框。</p>
+          </div>
+          <button class="quiet" data-action="refresh-pairing">刷新</button>
+        </div>
+        <div id="pairingList" class="empty">当前没有待处理请求。</div>
+      </section>
+
+      <section class="card">
+        <div class="section-title">
+          <div>
+            <h2>诊断与日志</h2>
+            <p id="startupState" class="muted">正在检查登录启动状态…</p>
+          </div>
+          <div class="inline-actions">
+            <button class="quiet" data-action="open-logs">在 Finder 打开</button>
+            <button class="quiet" data-action="refresh-log">刷新日志</button>
+          </div>
+        </div>
+        <label>日志文件
+          <select id="logName">
+            <option value="supervisor">macOS Supervisor</option>
+            <option value="host-out">Host 输出</option>
+            <option value="host-error">Host 错误</option>
+            <option value="web-out">Web 输出</option>
+            <option value="web-error">Web 错误</option>
+            <option value="bridge">Bridge 结构化日志</option>
+          </select>
+        </label>
+        <pre id="logOutput">请选择日志并刷新。</pre>
+      </section>
+
+      <footer>管理页面只监听 127.0.0.1，不会向手机或公网开放。</footer>
+    </main>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script src="/dashboard.js" type="module"></script>
+  </body>
+</html>

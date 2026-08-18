@@ -4,7 +4,7 @@
 
 # Codex Bridge
 
-**把运行在 Windows 上的 Codex，带到 Android 手机上。**
+**把运行在 Windows 或 macOS 上的 Codex，带到 Android 手机上。**
 
 在手机上查看任务、继续对话、处理审批和控制运行状态，实际执行仍留在自己的电脑。
 
@@ -29,16 +29,16 @@
 
 普通用户不需要克隆仓库，也不需要安装 Node.js：
 
-1. 从 [GitHub Releases](https://github.com/momo-888/codex-bridge/releases) 下载并运行 `CodexBridge-Windows-Setup.exe`。
+1. 从 [GitHub Releases](https://github.com/momo-888/codex-bridge/releases) 下载 Windows 安装程序，或下载并解压 `CodexBridge-macOS-arm64.zip` 后运行 `scripts/install-macos.sh`。
 2. 从同一 Release 下载 `CodexBridge.apk` 并安装到 Android 手机。
-3. 在 Windows 托盘图标中打开“手机连接…”，选择仅本机、局域网 / 异地组网或公网中继，并复制显示的地址。
-4. 在手机输入该地址并发送连接请求；核对托盘弹窗中的设备名与来源 IP 后选择允许。
+3. 在 Windows 托盘菜单或 macOS 浏览器管理页中选择仅本机、局域网 / 异地组网或公网中继，并复制显示的地址。
+4. 在手机输入该地址并发送连接请求；核对电脑弹窗中的设备名与来源 IP 后选择允许。
 
-`CodexBridge-Windows-Portable.zip` 适合不希望安装的用户：解压后直接运行根目录的 `CodexBridge.exe`。Windows 包已经包含运行时；只有源码开发和自行构建才需要 Node.js/npm。
+`CodexBridge-Windows-Portable.zip` 适合不希望安装的 Windows 用户：解压后直接运行根目录的 `CodexBridge.exe`。Windows 和 macOS 发布包均包含运行时；只有源码开发和自行构建才需要 Node.js/npm。
 
 如果手机和电脑不在同一局域网，推荐使用 [Linker](https://github.com/snltty/linker) / [Tailscale](https://tailscale.com/) 等可信异地组网的电脑 IP。不要把未加密的 Host 端口直接映射到公网；公网访问应使用自行部署的 HTTPS/WSS Relay。
 
-需要公网中继时，可从同一 Release 下载 `CodexBridge-Relay-Deploy.zip`。部署完成后，在托盘“手机连接…”中选择“公网中继”，填写中继地址、Host Token 和 Phone Token 即可；无需重新编译 Windows 或 Android 客户端。
+需要公网中继时，可从同一 Release 下载 `CodexBridge-Relay-Deploy.zip`。部署完成后，在电脑管理界面选择“公网中继”，填写中继地址、Host Token 和 Phone Token 即可；无需重新编译桌面端或 Android 客户端。
 
 > [!IMPORTANT]
 > 本项目与 OpenAI 无隶属、合作或背书关系。Codex 和 OpenAI 是其各自权利人的商标。
@@ -62,7 +62,7 @@ Android / PWA
       │                                        │
       └── HTTPS/WSS ── self-hosted Relay ──────┤
                                                ▼
-                                         Windows Host
+                                      Windows / macOS Host
                                                │
                                                ├── Codex App Server
                                                ├── ~/.codex history
@@ -84,11 +84,11 @@ Codex Bridge 面向单用户、自托管场景，不是多租户服务：
 
 ## 环境要求
 
-- Windows 10/11
+- Windows 10/11，或 macOS 13 及更高版本
 - Node.js 22.13 或更高版本（仅源码开发或自行构建需要；Release Windows 包已内置）
 - 已安装并登录、能够正常运行任务的 Codex Desktop
 - Android 8.0 或更高版本（使用 APK 时）
-- PowerShell 5.1 或更高版本
+- PowerShell 5.1 或更高版本（仅 Windows 脚本）
 
 ## Windows Host
 
@@ -144,6 +144,37 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-startup.ps1 `
 
 运行日志位于项目的 `.logs`；本地配置、令牌、队列和诊断记录位于 `%USERPROFILE%\.codex-bridge`，这些目录均不会提交到 Git。
 
+## macOS Host（浏览器管理模式）
+
+macOS 端不需要额外的原生客户端。后台 Supervisor 负责 Host、Codex、手机 Web 和 Relay 的健康检查、异常恢复与 Codex 更新后重启；管理页面只监听 `127.0.0.1:43109`。
+
+源码安装：
+
+```bash
+git clone https://github.com/momo-888/codex-bridge.git
+cd codex-bridge
+./scripts/install-macos.sh
+```
+
+脚本会安装依赖、构建网页、注册当前用户的 LaunchAgent，并打开管理页。发布包已经内置 Node 运行时，解压后执行相同命令即可；它会复制到 `~/Applications/CodexBridge` 后安装。常用命令：
+
+```bash
+./scripts/run-macos.sh          # 前台运行管理服务
+./scripts/start-codex-bridge.sh # 仅启动 Host/Web
+./scripts/stop-codex-bridge.sh
+./scripts/uninstall-macos.sh
+```
+
+管理页支持三种连接模式、Relay 连通性测试、启动/停止/重启、详细健康状态、配对允许/拒绝和日志查看。新配对请求也会弹出 macOS 原生确认框。配置与令牌位于 `~/.codex-bridge`（目录权限 `0700`、敏感文件 `0600`），运行日志位于项目 `.logs`。
+
+自行生成 macOS 发布包：
+
+```bash
+./scripts/build-macos-release.sh
+```
+
+输出位于 `outputs/macos-release`，包名包含当前构建架构。
+
 ## 自建 Relay
 
 Relay 需要独立的 Host Token 和 Phone Token，两个值都至少包含 32 个随机字符。示例配置位于 [`deploy/relay/.env.example`](deploy/relay/.env.example)。
@@ -188,7 +219,7 @@ $env:CODEX_BRIDGE_KEY_PASSWORD = "..."
 
 ## 开发与验证
 
-```powershell
+```bash
 npm run dev
 npm run host
 npm run typecheck
@@ -207,7 +238,7 @@ npm run icons
 
 ## 当前限制
 
-- Windows Host 与 Codex Desktop 集成目前仅支持 Windows。
+- macOS 发布包按构建机器架构生成；Intel 与 Apple Silicon 需要分别构建。
 - 公网 Relay 不提供端到端加密。
 - Desktop 正在执行的回合仍归 Desktop 所有，相关审批需要在电脑端完成。
 - App Server 协议会随 Codex 更新；升级 Codex 后应执行完整回归测试。

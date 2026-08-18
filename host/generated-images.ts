@@ -54,7 +54,9 @@ function localPathFromMarkdownSource(source: string) {
   } catch {
     return null;
   }
-  return path.isAbsolute(value) ? path.normalize(value) : null;
+  if (path.isAbsolute(value)) return path.normalize(value);
+  if (path.win32.isAbsolute(value)) return path.win32.normalize(value);
+  return null;
 }
 
 export function localMarkdownImageReferences(itemValue: unknown): LocalMarkdownImageReference[] {

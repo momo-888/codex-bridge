@@ -1,6 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CodexDesktopIpcClient, encodeIpcFrame } from "../host/codex-ipc";
+import {
+  CodexDesktopIpcClient,
+  codexDesktopIpcPath,
+  encodeIpcFrame,
+} from "../host/codex-ipc";
+
+test("resolves the platform-specific Codex Desktop IPC endpoint", () => {
+  assert.equal(codexDesktopIpcPath("win32", "ignored"), "\\\\.\\pipe\\codex-ipc");
+  assert.equal(
+    codexDesktopIpcPath("darwin", "/Users/tester"),
+    "/Users/tester/.codex/ipc/ipc.sock",
+  );
+  assert.throws(() => codexDesktopIpcPath("linux", "/home/tester"), /not available/);
+});
 
 test("encodes Codex Desktop IPC frames with a little-endian JSON length", () => {
   const message = { type: "request", method: "initialize", params: { clientType: "codex-bridge" } };
