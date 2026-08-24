@@ -10,7 +10,7 @@ namespace CodexBridge.Setup
 {
     internal static class Installer
     {
-        private const string ProductVersion = "0.6.5";
+        private const string ProductVersion = "0.6.6";
         private const string PayloadName = "CodexBridge.Payload.zip";
 
         [STAThread]

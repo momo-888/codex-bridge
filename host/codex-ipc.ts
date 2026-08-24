@@ -29,17 +29,26 @@ export function codexDesktopIpcPath(
 ) {
   if (platform === "win32") return "\\\\.\\pipe\\codex-ipc";
   if (platform === "darwin")
-    return path.join(homeDirectory, ".codex", "ipc", "ipc.sock");
+    return path.posix.join(homeDirectory, ".codex", "ipc", "ipc.sock");
   throw new Error(`Codex Desktop IPC is not available on ${platform}`);
 }
 
 const methodVersions: Record<string, number> = {
   "thread-unarchived": 1,
   "thread-owner-discovery": 1,
-  "thread-follower-start-turn": 1,
+  "thread-follower-start-turn": 2,
   "thread-follower-interrupt-turn": 4,
   "thread-follower-update-thread-settings": 1,
 };
+
+function supportsLegacyStartTurnRetry(error: unknown) {
+  return (
+    error instanceof Error &&
+    /no-client-found|client-cannot-handle-request|request-version-mismatch|unsupported.*version|version.*mismatch/i.test(
+      error.message,
+    )
+  );
+}
 
 function methodVersion(method: string, params: unknown) {
   if (
@@ -115,20 +124,49 @@ export class CodexDesktopIpcClient {
     input: CodexInput[],
     overrides: CodexRunOverrides = {},
   ) {
-    const response = await this.request(
-      "thread-follower-start-turn",
-      {
-        conversationId,
-        turnStartParams: {
-          clientUserMessageId: randomUUID(),
-          input,
-          ...overrides,
+    const clientUserMessageId = randomUUID();
+    try {
+      const response = await this.request(
+        "thread-follower-start-turn",
+        {
+          conversationId,
+          turnStart: {
+            request: {
+              threadId: conversationId,
+              clientUserMessageId,
+              input,
+              ...overrides,
+            },
+            context: {
+              inheritThreadSettings: true,
+              usePermissionSelection: false,
+              mcpAppModelContextAttachments: [],
+            },
+          },
         },
-        mcpAppModelContextAttachments: [],
-      },
-      { targetClientId: ownerClientId, timeoutMs: 60_000 },
-    );
-    return response.result;
+        { targetClientId: ownerClientId, timeoutMs: 60_000 },
+      );
+      return response.result;
+    } catch (error) {
+      // Codex Desktop versions before the v2 turnStart envelope only advertise
+      // version 1. Retry only when the broker confirms a protocol mismatch; a
+      // timeout or turn error may have reached Desktop and must not be replayed.
+      if (!supportsLegacyStartTurnRetry(error)) throw error;
+      const response = await this.request(
+        "thread-follower-start-turn",
+        {
+          conversationId,
+          turnStartParams: {
+            clientUserMessageId,
+            input,
+            ...overrides,
+          },
+          mcpAppModelContextAttachments: [],
+        },
+        { targetClientId: ownerClientId, timeoutMs: 60_000, version: 1 },
+      );
+      return response.result;
+    }
   }
 
   async interruptTurn(
@@ -242,13 +280,14 @@ export class CodexDesktopIpcClient {
   private async request(
     method: string,
     params: unknown,
-    options: { targetClientId?: string; timeoutMs?: number } = {},
+    options: { targetClientId?: string; timeoutMs?: number; version?: number } = {},
   ) {
     await this.connect();
+    const { version = methodVersion(method, params), ...requestOptions } = options;
     return this.requestRaw(method, params, {
-      ...options,
+      ...requestOptions,
       sourceClientId: this.clientId,
-      version: methodVersion(method, params),
+      version,
     });
   }
 

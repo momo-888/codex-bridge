@@ -70,16 +70,24 @@ test("waits until a Desktop renderer claims the announced thread", async () => {
 
 test("passes model, effort, and permissions to a Desktop-owned turn", async () => {
   const client = new CodexDesktopIpcClient();
+  let capturedMethod = "";
   let captured: Record<string, unknown> = {};
+  let capturedOptions: Record<string, unknown> = {};
   const internals = client as unknown as {
-    request(
+    clientId: string;
+    connect(): Promise<void>;
+    requestRaw(
       method: string,
       params: Record<string, unknown>,
       options: Record<string, unknown>,
     ): Promise<{ result: unknown }>;
   };
-  internals.request = async (_method, params) => {
+  internals.clientId = "codex-bridge";
+  internals.connect = async () => undefined;
+  internals.requestRaw = async (method, params, options) => {
+    capturedMethod = method;
     captured = params;
+    capturedOptions = options;
     return { result: { id: "turn-desktop" } };
   };
 
@@ -92,14 +100,59 @@ test("passes model, effort, and permissions to a Desktop-owned turn", async () =
     permissions: ":workspace",
   });
 
-  const turnStartParams = captured?.turnStartParams as Record<string, unknown>;
-  assert.equal(turnStartParams.model, "gpt-test");
-  assert.equal(turnStartParams.effort, "high");
-  assert.equal(turnStartParams.permissions, ":workspace");
-  assert.deepEqual(turnStartParams.input, [
+  assert.equal(capturedMethod, "thread-follower-start-turn");
+  assert.equal(capturedOptions.targetClientId, "desktop-owner");
+  assert.equal(capturedOptions.version, 2);
+  const turnStart = captured.turnStart as Record<string, unknown>;
+  const request = turnStart.request as Record<string, unknown>;
+  assert.equal(request.threadId, "thread-1");
+  assert.equal(request.model, "gpt-test");
+  assert.equal(request.effort, "high");
+  assert.equal(request.permissions, ":workspace");
+  assert.deepEqual(request.input, [
     { type: "text", text: "continue", text_elements: [] },
     { type: "localImage", path: "C:\\temp\\phone.webp" },
   ]);
+  assert.deepEqual(turnStart.context, {
+    inheritThreadSettings: true,
+    usePermissionSelection: false,
+    mcpAppModelContextAttachments: [],
+  });
+});
+
+test("falls back to the v1 Desktop turn envelope only for protocol incompatibility", async () => {
+  const client = new CodexDesktopIpcClient();
+  const attempts: Array<{ params: Record<string, unknown>; options: Record<string, unknown> }> = [];
+  const internals = client as unknown as {
+    clientId: string;
+    connect(): Promise<void>;
+    requestRaw(
+      method: string,
+      params: Record<string, unknown>,
+      options: Record<string, unknown>,
+    ): Promise<{ result: unknown }>;
+  };
+  internals.clientId = "codex-bridge";
+  internals.connect = async () => undefined;
+  internals.requestRaw = async (_method, params, options) => {
+    attempts.push({ params, options });
+    if (options.version === 2) throw new Error("no-client-found");
+    return { result: { id: "legacy-turn" } };
+  };
+
+  await client.startTurn(
+    "desktop-owner",
+    "thread-legacy",
+    [{ type: "text", text: "continue", text_elements: [] }],
+  );
+
+  assert.deepEqual(attempts.map(({ options }) => options.version), [2, 1]);
+  assert.equal("turnStart" in attempts[0].params, true);
+  const legacy = attempts[1].params.turnStartParams as Record<string, unknown>;
+  assert.deepEqual(legacy.input, [
+    { type: "text", text: "continue", text_elements: [] },
+  ]);
+  assert.equal(typeof legacy.clientUserMessageId, "string");
 });
 
 test("updates Desktop thread settings before the next turn", async () => {
