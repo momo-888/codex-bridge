@@ -31,7 +31,7 @@
     "react-server-dom-webpack": "^19.2.8",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.4",
     "tsx": "^4.23.11",
     "vinext": "^1.0.0-beta.6",
     "vite": "^8.2.1",
